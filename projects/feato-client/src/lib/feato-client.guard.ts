@@ -1,6 +1,5 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router, UrlTree } from '@angular/router';
-import { map, take } from 'rxjs';
 import { FeatoClient } from './feato-client.service';
 
 export interface FeatoGuardOptions {
@@ -22,19 +21,15 @@ export function featoGuard(flagKey: string, options: FeatoGuardOptions = {}): Ca
     const client = inject(FeatoClient);
     const router = options.redirectTo ? inject(Router) : undefined;
 
-    return client.flag$(flagKey).pipe(
-      take(1),
-      map((value) => {
-        const allowed = value ?? options.fallback ?? false;
+    const value = client.flag(flagKey)();
+    const allowed = value ?? options.fallback ?? false;
 
-        if (!allowed && options.redirectTo) {
-          return typeof options.redirectTo === 'string'
-            ? router!.parseUrl(options.redirectTo)
-            : options.redirectTo;
-        }
+    if (!allowed && options.redirectTo) {
+      return typeof options.redirectTo === 'string'
+        ? router!.parseUrl(options.redirectTo)
+        : options.redirectTo;
+    }
 
-        return allowed;
-      })
-    );
+    return allowed;
   };
 }

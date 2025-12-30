@@ -1,5 +1,5 @@
 import { HttpBackend, HttpEvent, HttpRequest, HttpResponse } from '@angular/common/http';
-import { Observable, of, throwError } from 'rxjs';
+import { firstValueFrom, Observable, of, throwError } from 'rxjs';
 import { FeatoClient } from './feato-client.service';
 import { FeatoClientConfig } from './feato-client.model';
 
@@ -70,8 +70,11 @@ describe('FeatoClient', () => {
 
     const service = new FeatoClient(backend, config);
 
-    expect(service.flag('featureA' as any) as any).toBe(true);
-    expect(service.flag('featureB' as any) as any).toBe(false);
+    // Test signal API
+    expect(service.flag('featureA')()).toBe(true);
+    expect(service.flag('featureB')()).toBe(false);
+    expect(service.flags()).toEqual({ featureA: true, featureB: false });
+    expect(service.initialized()).toBe(true);
 
     expect(MockEventSource.instances.length).toBe(1);
     const es = MockEventSource.instances[0];
@@ -98,10 +101,14 @@ describe('FeatoClient', () => {
     const service = new FeatoClient(backend, config);
     const es = MockEventSource.instances[0];
 
+    // Test signal updates
     es.onmessage?.({ data: JSON.stringify({ key: 'featureA', value: false, updatedAt: new Date() }) } as any);
-    expect(service.flag('featureA' as any) as any).toBe(false);
+    expect(service.flag('featureA')()).toBe(false);
+    expect(service.flags()).toEqual({ featureA: false });
+    
     es.onmessage?.({ data: JSON.stringify({ key: 'newFlag', value: true, updatedAt: new Date() }) } as any);
-    expect(service.flag('newFlag' as any) as any).toBe(true);
+    expect(service.flag('newFlag')()).toBe(true);
+    expect(service.flags()).toEqual({ featureA: false, newFlag: true });
   });
 
   it('disconnects (closes EventSource) on SSE error', () => {
@@ -136,7 +143,106 @@ describe('FeatoClient', () => {
 
     expect(errorSpy).toHaveBeenCalled();
     expect(MockEventSource.instances.length).toBe(0);
-    expect(service.flag('featureA' as any) as any).toBeUndefined();
+    expect(service.flag('featureA')()).toBeUndefined();
+    expect(service.flags()).toEqual({});
+    expect(service.initialized()).toBe(false);
     errorSpy.mockRestore();
+  });
+
+  it('exposes flags via observable API (flags$)', async () => {
+    const backend = new MockHttpBackend(() =>
+      of(
+        new HttpResponse({
+          status: 200,
+          body: {
+            environment: config.environment,
+            flags: { featureA: true },
+          },
+        })
+      )
+    );
+
+    const service = new FeatoClient(backend, config);
+    
+    const flags = await firstValueFrom(service.flags$);
+    expect(flags).toEqual({ featureA: true });
+  });
+
+  it('exposes initialized status via observable API (initialized$)', async () => {
+    const backend = new MockHttpBackend(() =>
+      of(
+        new HttpResponse({
+          status: 200,
+          body: {
+            environment: config.environment,
+            flags: {},
+          },
+        })
+      )
+    );
+
+    const service = new FeatoClient(backend, config);
+    
+    // Wait for initialization
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
+    const initialized = await firstValueFrom(service.initialized$);
+    expect(initialized).toBe(true);
+  });
+
+  it('exposes individual flag via observable API (flag$)', async () => {
+    const backend = new MockHttpBackend(() =>
+      of(
+        new HttpResponse({
+          status: 200,
+          body: {
+            environment: config.environment,
+            flags: { featureA: true, featureB: false },
+          },
+        })
+      )
+    );
+
+    const service = new FeatoClient(backend, config);
+    
+    const featureA = await firstValueFrom(service.flag$('featureA'));
+    expect(featureA).toBe(true);
+
+    const featureB = await firstValueFrom(service.flag$('featureB'));
+    expect(featureB).toBe(false);
+
+    const nonExistent = await firstValueFrom(service.flag$('nonExistent'));
+    expect(nonExistent).toBeUndefined();
+  });
+
+  it('synchronizes signals and observables when flags update', async () => {
+    const backend = new MockHttpBackend(() =>
+      of(
+        new HttpResponse({
+          status: 200,
+          body: {
+            environment: config.environment,
+            flags: { featureA: true },
+          },
+        })
+      )
+    );
+
+    const service = new FeatoClient(backend, config);
+    const es = MockEventSource.instances[0];
+
+    // Both signal and observable should reflect the same value
+    expect(service.flag('featureA')()).toBe(true);
+    
+    let observableValue = await firstValueFrom(service.flag$('featureA'));
+    expect(observableValue).toBe(true);
+
+    // Update via SSE
+    es.onmessage?.({ data: JSON.stringify({ key: 'featureA', value: false, updatedAt: new Date() }) } as any);
+
+    // Both should update
+    expect(service.flag('featureA')()).toBe(false);
+    observableValue = await firstValueFrom(service.flag$('featureA'));
+    expect(observableValue).toBe(false);
   });
 });
