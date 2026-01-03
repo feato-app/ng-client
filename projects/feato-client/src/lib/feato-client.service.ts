@@ -15,6 +15,10 @@ export class FeatoClient {
   private readonly _http: HttpClient;
 
   private _eventSource?: EventSource;
+  private _reconnectAttempts = 0;
+  private _reconnectTimeoutId?: number;
+  private _maxReconnectDelay = 30000; // 30 seconds
+  private _baseReconnectDelay = 1000; // 1 second
 
   readonly flags$ = this._flags$.asObservable();
   readonly initialized$ = this._initialized$.asObservable();
@@ -80,7 +84,7 @@ export class FeatoClient {
     };
 
     this._eventSource.onerror = () => {
-      this.disconnect();
+      this._handleConnectionError();
     };
   }
 
@@ -91,11 +95,39 @@ export class FeatoClient {
 
     this._flags$.next(flags);
     this._flags.set(flags);
+
+    // Reset reconnect attempts on successful message
+    this._reconnectAttempts = 0;
+  }
+
+  private _handleConnectionError(): void {
+    this._eventSource?.close();
+    this._eventSource = undefined;
+
+    // Calculate delay with exponential backoff
+    const delay = Math.min(
+      this._baseReconnectDelay * Math.pow(2, this._reconnectAttempts),
+      this._maxReconnectDelay
+    );
+
+    this._reconnectAttempts++;
+
+    console.log(`FeatoClient: Connection lost. Reconnecting in ${delay}ms (attempt ${this._reconnectAttempts})...`);
+
+    this._reconnectTimeoutId = setTimeout(() => {
+      this._connect();
+    }, delay);
   }
 
   disconnect(): void {
+    if (this._reconnectTimeoutId) {
+      clearTimeout(this._reconnectTimeoutId);
+      this._reconnectTimeoutId = undefined;
+    }
+
     this._eventSource?.close();
     this._eventSource = undefined;
+    this._reconnectAttempts = 0;
   }
 
   flag$(key: string): Observable<boolean | undefined> {

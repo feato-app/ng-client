@@ -36,7 +36,7 @@ ng build feato-client
 ## 🚀 Publish package to NPM
 
 ``` bash
-cd /dist/feato-client
+cd .\dist\feato-client\
 npm login
 npm publish --access public
 ```
