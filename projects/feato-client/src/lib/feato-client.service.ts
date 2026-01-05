@@ -3,7 +3,7 @@ import { computed, signal, Signal } from '@angular/core';
 import { BehaviorSubject, catchError, EMPTY, map, Observable, of } from 'rxjs';
 import { FeatoClientConfig, FeatureFlagEvent, FeatureFlagsResponse } from './feato-client.model';
 
-const apiUrl = 'https://feato-hub-service-229218510057.us-central1.run.app/v1';
+const apiUrl = 'https://hub.feato.io/v1';
 
 export class FeatoClient {
   private readonly _flags$ = new BehaviorSubject<Record<string, boolean>>({});

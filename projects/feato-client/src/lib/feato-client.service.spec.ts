@@ -79,7 +79,7 @@ describe('FeatoClient', () => {
     expect(MockEventSource.instances.length).toBe(1);
     const es = MockEventSource.instances[0];
     expect(es.url).toBe(
-      `https://feato-hub-service-229218510057.us-central1.run.app/v1/hub?secret=${config.projectKey}&environment=${config.environment}&version=1`
+      `https://hub.feato.io/v1/hub?secret=${config.projectKey}&environment=${config.environment}&version=1`
     );
     expect(es.onmessage).toBeTypeOf('function');
     expect(es.onerror).toBeTypeOf('function');
