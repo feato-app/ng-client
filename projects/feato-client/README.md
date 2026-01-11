@@ -198,7 +198,7 @@ FeatoGuardOptions;
 Flag accessors:
 
 ```ts
-flag(key: string): boolean | undefined;
+flag(key: string): Signal<boolean | undefined>;
 flag$(key: string): Observable<boolean | undefined>;
 ```
 
